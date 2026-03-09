@@ -114,6 +114,15 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
 
     response = await generate_test(request, wrapped)
 
+    # Override enrichment metadata with the RAG-level enrichment (not the
+    # double-enrichment that generate_test performs on the already-enriched text)
+    response.metadata["enrichment"] = {
+        "original_description": body.test_description,
+        "enriched_description": enriched_description,
+        "enrichment_used": enrichment["used"],
+        **({"enrichment_error": enrichment["error"]} if "error" in enrichment else {}),
+    }
+
     response.metadata["rag_enabled"] = True
     response.metadata["rag_context"] = {
         "accessibility_ids_found": len(rag_context.get("accessibility_ids", [])),
