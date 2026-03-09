@@ -15,12 +15,27 @@ from app.schemas.test_schemas import (
 router = APIRouter()
 
 
+async def _enrich(request: Request, description: str) -> dict:
+    """Run enrichment in a thread and return the enrichment result dict."""
+    svc = request.app.state.enrichment_service
+    return await asyncio.to_thread(svc.enrich, description)
+
+
 @router.post("/generate-test", response_model=TestGenerationResponse)
 async def generate_test(request: Request, body: TestGenerationRequest):
-    """Generate a single test using the injected TestGenerator."""
+    """Generate a single test.
+
+    The description is automatically enriched by the LLM before generation.
+    Both the original and enriched descriptions are returned in metadata.
+    """
+    enrichment = await _enrich(request, body.test_description)
+
+    # Replace the description with the enriched version for generation
+    enriched_body = body.model_copy(update={"test_description": enrichment["enriched"]})
+
     generator = request.app.state.test_generator
     try:
-        return await asyncio.to_thread(generator.run, body)
+        response = await asyncio.to_thread(generator.run, enriched_body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except HTTPException:
@@ -28,24 +43,38 @@ async def generate_test(request: Request, body: TestGenerationRequest):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error generating test: {exc}")
 
+    response.metadata["enrichment"] = {
+        "original_description": enrichment["original"],
+        "enriched_description": enrichment["enriched"],
+        "enrichment_used": enrichment["used"],
+        **({"enrichment_error": enrichment["error"]} if "error" in enrichment else {}),
+    }
+    return response
+
 
 @router.post("/generate-test-with-rag", response_model=TestGenerationResponse)
 async def generate_test_with_rag(request: Request, body: RAGTestGenerationRequest):
-    """Generate a test using RAG to automatically retrieve context from the codebase."""
-    rag_service = request.app.state.rag_service
+    """Generate a test using RAG context.
 
+    The description is enriched before the RAG query and test generation steps,
+    so both retrieval quality and generated test quality benefit.
+    """
     test_type = body.test_type.lower().strip()
     if test_type not in {"unit", "ui"}:
         raise HTTPException(status_code=400, detail="test_type must be 'unit' or 'ui'")
 
-    rag_context = rag_service.query(body.test_description, k=body.rag_top_k)
+    # Enrich first — better description → better RAG retrieval
+    enrichment = await _enrich(request, body.test_description)
+    enriched_description = enrichment["enriched"]
+
+    rag_service = request.app.state.rag_service
+    rag_context = rag_service.query(enriched_description, k=body.rag_top_k)
 
     code_snippets_text = "\n\n".join(
         f"// {s['kind']} from {s['path']}\n{s['content']}"
         for s in rag_context["code_snippets"]
     )
 
-    # Use caller-supplied app_name → fallback to config default
     resolved_app_name = body.app_name or settings.default_app_name
 
     app_context = AppContext(
@@ -56,7 +85,7 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
     )
 
     wrapped = TestGenerationRequest(
-        test_description=body.test_description,
+        test_description=enriched_description,
         test_type=test_type,
         app_context=app_context,
         class_name=body.class_name,
@@ -83,6 +112,7 @@ async def generate_tests_batch(request: Request, bodies: List[TestGenerationRequ
     """Generate multiple tests in parallel using asyncio.gather.
 
     Capped at ``settings.batch_max_size`` requests per call.
+    Each description is enriched independently before generation.
     """
     if len(bodies) > settings.batch_max_size:
         raise HTTPException(
@@ -93,10 +123,23 @@ async def generate_tests_batch(request: Request, bodies: List[TestGenerationRequ
             ),
         )
 
+    # Enrich all descriptions in parallel
+    enrichments = await asyncio.gather(
+        *[_enrich(request, req.test_description) for req in bodies],
+        return_exceptions=True,
+    )
+
+    enriched_bodies = []
+    for req, enc in zip(bodies, enrichments):
+        if isinstance(enc, Exception):
+            enriched_bodies.append(req)  # fallback: use original
+        else:
+            enriched_bodies.append(req.model_copy(update={"test_description": enc["enriched"]}))
+
     generator = request.app.state.test_generator
 
     results_raw = await asyncio.gather(
-        *[asyncio.to_thread(generator.run, req) for req in bodies],
+        *[asyncio.to_thread(generator.run, req) for req in enriched_bodies],
         return_exceptions=True,
     )
 
@@ -110,6 +153,12 @@ async def generate_tests_batch(request: Request, bodies: List[TestGenerationRequ
                 "description": (bodies[idx].test_description or "")[:100],
             })
         else:
+            enc = enrichments[idx]
+            if not isinstance(enc, Exception):
+                item.metadata["enrichment"] = {
+                    "original_description": enc["original"],
+                    "enriched_description": enc["enriched"],
+                }
             results.append(item)
 
     return {

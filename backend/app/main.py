@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.services.enrichment_service import EnrichmentService
 from app.services.test_generator import TestGenerator
 from app.services.rag_service import RAGService
 from app.api.routes import health, tests
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.test_generator = TestGenerator(llm=llm)
     app.state.rag_service = RAGService(settings=settings)
+    app.state.enrichment_service = EnrichmentService(llm=llm)
     logger.info("Services initialised. Auth enabled: %s", bool(settings.api_key))
     yield
     # teardown (nothing needed for now)
