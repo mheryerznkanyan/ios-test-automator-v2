@@ -86,6 +86,11 @@ ELEMENT QUERY RULES (CRITICAL - MUST FOLLOW):
 - To verify a screen is visible: check for specific UI elements ON that screen (buttons, labels, text fields, tables) — NOT the screen container
 - For navigation verification: check that expected elements exist on the destination screen
 
+LOCALE / KEYBOARD (CRITICAL):
+- ALWAYS set launchArguments before app.launch() to force English keyboard:
+  app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+- This prevents the simulator from switching to the system keyboard language mid-test.
+
 FORBIDDEN PATTERNS (will cause build or test failures):
 - NEVER use app.otherElements[] — it does NOT work for SwiftUI views
 - NEVER use NSPredicate anywhere — not with matching(), not with XCUIElementQuery, not for filtering elements. It causes fragile tests and often fails.
@@ -107,6 +112,8 @@ RAG CONTEXT USAGE (CRITICAL):
 
 Example pattern with proper waits:
 ```swift
+// Always force English locale to prevent keyboard language switching on simulators
+app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
 app.launch()
 
 // Wait for login screen to appear

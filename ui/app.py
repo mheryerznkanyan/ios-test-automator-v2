@@ -338,7 +338,11 @@ def run_xcode_test(class_name: str, swift_code: str, simulator_id: str, record_v
             "-destination", f"id={simulator_id}",
             f"-only-testing:{TEST_TARGET}/{class_name}/{test_method}",
             "-parallel-testing-enabled", "NO",
-            "-maximum-concurrent-test-simulator-destinations", "1"
+            "-maximum-concurrent-test-simulator-destinations", "1",
+            # Force English locale so the simulator never switches to the
+            # system keyboard language (e.g. Armenian) mid-test.
+            "-testLanguage", "en",
+            "-testRegion", "en_US",
         ]
 
         st.info(f"Running test: {class_name}/{test_method} on simulator {simulator_id[:8]}...")
