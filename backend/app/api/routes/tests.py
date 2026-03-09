@@ -1,5 +1,6 @@
 """Test generation routes"""
 import asyncio
+import logging
 from typing import List
 
 from fastapi import APIRouter, HTTPException, Request
@@ -11,6 +12,9 @@ from app.schemas.test_schemas import (
     TestGenerationResponse,
     RAGTestGenerationRequest,
 )
+from app.services.navigation_service import NavigationService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -75,6 +79,22 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
         for s in rag_context["code_snippets"]
     )
 
+    # Extract and inject navigation context (like v1 did)
+    navigation_context_str = ""
+    navigation_metadata = {}
+    if settings.project_root:
+        try:
+            nav_service = NavigationService(settings.project_root)
+            await asyncio.to_thread(nav_service.extract)
+            navigation_context_str = nav_service.format_for_prompt(enriched_description)
+            if navigation_context_str:
+                code_snippets_text = f"{navigation_context_str}\n\n{code_snippets_text}"
+                navigation_metadata["navigation_context_used"] = True
+                logger.info("Navigation context injected into prompt")
+        except Exception as e:
+            logger.warning("Failed to extract navigation context: %s", e)
+            navigation_metadata["navigation_context_error"] = str(e)
+
     resolved_app_name = body.app_name or settings.default_app_name
 
     app_context = AppContext(
@@ -103,6 +123,8 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
     }
     if "error" in rag_context:
         response.metadata["rag_error"] = rag_context["error"]
+    if navigation_metadata:
+        response.metadata["navigation"] = navigation_metadata
 
     return response
 

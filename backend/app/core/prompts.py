@@ -73,30 +73,51 @@ WAIT PATTERN EXAMPLES:
 - For navigation: Wait for destination screen's key element with waitForExistence(timeout: 5)
 
 ELEMENT QUERY RULES (CRITICAL - MUST FOLLOW):
+SwiftUI List Access (MOST COMMON ISSUE):
+- NEVER use app.tables["identifier"] or app.collectionViews["identifier"] to access SwiftUI Lists — the identifier may be overridden by modifiers like .searchable()
+- CORRECT: use app.cells.element(boundBy: 0) — SwiftUI List exposes cells directly
+- For first item: app.cells.element(boundBy: 0)
+- For second item: app.cells.element(boundBy: 1)
+- To verify list loaded: XCTAssertTrue(app.cells.element(boundBy: 0).waitForExistence(timeout: 10))
+
+Other Element Queries:
 - For text fields: use app.textFields["identifier"] or app.secureTextFields["identifier"]
 - For buttons: use app.buttons["identifier"]
 - For labels/text: use app.staticTexts["identifier"]
 - For tab bars: use app.tabBars.buttons["TabName"]
-- For lists (SwiftUI List): use app.collectionViews["identifier"] — SwiftUI List renders as UICollectionView on iOS 16+, NOT as UITableView
-- For cells in lists: use app.collectionViews["listIdentifier"].cells.element(boundBy: index)
-- NEVER use app.tables[] for SwiftUI List — it will NOT find the element on modern iOS
-- For SwiftUI .searchable(): use app.searchFields.firstMatch — the system search field does NOT get a custom accessibilityIdentifier
+- For search fields: use app.searchFields.firstMatch
 - For images: use app.images["identifier"]
 - For navigation back button: use app.navigationBars.buttons.element(boundBy: 0)
 - To access elements with dynamic identifiers (e.g. "itemTitle_1"): use the known identifier string directly
-- To verify a screen is visible: check for specific UI elements ON that screen (buttons, labels, text fields, tables) — NOT the screen container
-- For navigation verification: check that expected elements exist on the destination screen
+- To verify a screen is visible: check for specific UI elements ON that screen using their accessibilityIdentifier — NOT raw text, NOT the screen container
+- For navigation verification: check that expected elements exist on the destination screen using accessibility identifiers from RAG context
+- For SwiftUI .navigationTitle("Title"): use app.navigationBars["Title"] to check the title — do NOT use app.staticTexts["Title"] because navigation titles are NOT rendered as StaticTexts
+- ALWAYS prefer accessibility identifiers over raw text matching. If RAG context shows an element has .accessibilityIdentifier("welcomeMessage"), use app.staticTexts["welcomeMessage"] — NOT app.staticTexts["Welcome, Test!"]
+
+ELEMENT TYPE FLEXIBILITY:
+RAG metadata may not always have the exact element type. When querying form elements, be flexible:
+```swift
+// Try TextView first, fall back to TextField
+let descriptionView = app.textViews["editDescriptionField"]
+let descriptionField = app.textFields["editDescriptionField"]
+if !descriptionView.waitForExistence(timeout: 2) && !descriptionField.waitForExistence(timeout: 2) {
+    XCTFail("Edit description field should appear as TextView or TextField")
+}
+```
 
 LOCALE / KEYBOARD (CRITICAL):
 - ALWAYS set launchArguments before app.launch() to force English keyboard:
   app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
 - This prevents the simulator from switching to the system keyboard language mid-test.
 
-FORBIDDEN PATTERNS (will cause build or test failures):
-- NEVER use app.otherElements[] — it does NOT work for SwiftUI views
+FORBIDDEN PATTERNS (will cause build or test failures — ABSOLUTE RULES):
+- NEVER use app.otherElements[] — it does NOT work for SwiftUI views. This applies to ALL identifiers, including screen-level identifiers like ones ending in "Screen" (e.g. "itemListScreen", "loginScreen"). If an accessibilityIdentifier is on a SwiftUI container (Group, VStack, NavigationStack), it will render as otherElements and WILL FAIL.
+- Instead of checking screen containers, verify the screen by checking a SPECIFIC child element (a button, text field, list, or label with an accessibilityIdentifier).
 - NEVER use NSPredicate anywhere — not with matching(), not with XCUIElementQuery, not for filtering elements. It causes fragile tests and often fails.
 - NEVER use .matching(NSPredicate(...)) or .containing(NSPredicate(...))
+- NEVER use .allElementsBoundByIndex.contains — this is NOT valid Swift/XCTest syntax
 - NEVER guess data values — use ONLY values from the provided RAG context (accessibility IDs, screen names, code snippets). If the context includes sample data or seed data, use those exact values.
+- NEVER use compound boolean expressions in XCTAssertTrue — keep assertions simple: one condition per assert
 
 DATA VALUE ASSERTIONS (CRITICAL):
 - NEVER hardcode specific data values (item titles, prices, categories) in XCTAssertEqual unless you are 100% certain of the exact value.
@@ -111,33 +132,112 @@ RAG CONTEXT USAGE (CRITICAL):
 - If the context shows how data is generated (e.g. item titles, categories), study the code carefully to understand the data patterns. Pay attention to array indexing (0-based vs 1-based) and modular arithmetic.
 - If the context shows a login flow, follow the EXACT field identifiers and credentials from the code.
 
-Example pattern with proper waits:
+MANDATORY PATTERN: Springboard Alert Handling (CRITICAL):
+System popups ("Save Password", location, notifications) block tests. Handle them:
 ```swift
-// Always force English locale to prevent keyboard language switching on simulators
+let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+
+// After login — handle "Save Password" popup
+loginButton.tap()
+
+let springboardAlert = springboard.alerts.firstMatch
+if springboardAlert.waitForExistence(timeout: 5) {
+    if springboard.alerts.buttons["Not Now"].exists {
+        springboard.alerts.buttons["Not Now"].tap()
+    } else if springboard.alerts.buttons["Don't Save"].exists {
+        springboard.alerts.buttons["Don't Save"].tap()
+    } else {
+        springboard.alerts.buttons.element(boundBy: 0).tap()
+    }
+    _ = springboardAlert.waitForNonExistence(timeout: 3)
+}
+```
+
+MANDATORY PATTERN: Tab Navigation and Screen Verification (CRITICAL):
+ALWAYS navigate to the tab BEFORE verifying elements on that tab.
+```swift
+// After login, verify default screen loaded (Items List)
+let firstCell = app.cells.element(boundBy: 0)
+XCTAssertTrue(firstCell.waitForExistence(timeout: 10), "Items list should appear after login")
+
+// Navigate to Profile tab FIRST, THEN verify elements
+let profileTab = app.tabBars.buttons["Profile"]
+XCTAssertTrue(profileTab.waitForExistence(timeout: 5), "Profile tab should exist")
+profileTab.tap()
+
+// NOW verify elements on Profile screen
+let welcomeMessage = app.staticTexts["welcomeMessage"]
+XCTAssertTrue(welcomeMessage.waitForExistence(timeout: 5), "Welcome message should appear on profile screen")
+```
+
+FLOW RULES:
+1. After login -> Verify default screen (Items List with cells)
+2. To check Profile elements -> Navigate to Profile tab FIRST
+3. To check other tabs -> Navigate there FIRST, then verify
+
+MANDATORY PATTERN: Button State Verification (CRITICAL):
+```swift
+let loginButton = app.buttons["loginButton"]
+XCTAssertTrue(loginButton.waitForExistence(timeout: 5), "Login button should exist")
+// Check if button is enabled before tapping (form validation may disable it)
+XCTAssertTrue(loginButton.isEnabled, "Login button should be enabled with valid credentials")
+loginButton.tap()
+```
+
+MANDATORY PATTERN: Loading State Handling (CRITICAL):
+```swift
+// After triggering action that loads data (login, refresh, navigation)
+let loadingIndicator = app.activityIndicators.firstMatch
+if loadingIndicator.exists {
+    XCTAssertTrue(loadingIndicator.waitForNonExistence(timeout: 10), "Loading indicator should disappear")
+}
+// Now verify content loaded
+let firstCell = app.cells.element(boundBy: 0)
+XCTAssertTrue(firstCell.waitForExistence(timeout: 5), "Content should appear after loading completes")
+```
+
+MANDATORY PATTERN: Descriptive Failure Messages (CRITICAL):
+```swift
+// Pattern: "Element should action context"
+XCTAssertTrue(emailTextField.exists, "Email field should appear on login screen")
+XCTAssertTrue(firstCell.waitForExistence(timeout: 10), "First item cell should appear after login")
+```
+
+FULL EXAMPLE — Login + verify item list:
+```swift
 app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
 app.launch()
 
-// Wait for login screen to appear
-let emailTextField = app.textFields["emailTextField"]
-XCTAssertTrue(emailTextField.waitForExistence(timeout: 5), "Email field should appear")
+let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
 
+// Login
+let emailTextField = app.textFields["emailTextField"]
+XCTAssertTrue(emailTextField.waitForExistence(timeout: 5), "Email field should appear on login screen")
 emailTextField.tap()
 emailTextField.typeText("test@example.com")
 
 let passwordTextField = app.secureTextFields["passwordTextField"]
-XCTAssertTrue(passwordTextField.waitForExistence(timeout: 5), "Password field should exist")
-
+XCTAssertTrue(passwordTextField.waitForExistence(timeout: 5), "Password field should exist on login screen")
 passwordTextField.tap()
 passwordTextField.typeText("password123")
 
 let loginButton = app.buttons["loginButton"]
 XCTAssertTrue(loginButton.waitForExistence(timeout: 5), "Login button should exist")
-
+XCTAssertTrue(loginButton.isEnabled, "Login button should be enabled")
 loginButton.tap()
 
-// Wait for next screen after login
-let itemList = app.collectionViews["itemList"]
-XCTAssertTrue(itemList.waitForExistence(timeout: 10), "Item list should appear after login")
+// Handle "Save Password" popup
+let springboardAlert = springboard.alerts.firstMatch
+if springboardAlert.waitForExistence(timeout: 5) {
+    if springboard.alerts.buttons["Not Now"].exists {
+        springboard.alerts.buttons["Not Now"].tap()
+    }
+    _ = springboardAlert.waitForNonExistence(timeout: 3)
+}
+
+// Verify items list loaded — use cells directly, NOT collectionViews
+let firstCell = app.cells.element(boundBy: 0)
+XCTAssertTrue(firstCell.waitForExistence(timeout: 10), "First item cell should appear after login")
 ```
 
 Output ONLY the Swift code, no markdown formatting or explanations outside the code.
