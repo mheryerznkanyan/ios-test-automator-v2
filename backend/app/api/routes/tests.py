@@ -19,7 +19,7 @@ async def generate_test(request: Request, body: TestGenerationRequest):
     """Generate a single test using the injected TestGenerator."""
     generator = request.app.state.test_generator
     try:
-        return generator.run(body)
+        return await asyncio.to_thread(generator.run, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except HTTPException:

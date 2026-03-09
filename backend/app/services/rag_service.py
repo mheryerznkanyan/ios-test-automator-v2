@@ -11,8 +11,8 @@ class RAGService:
 
     def _get_vectorstore(self):
         if self._vectorstore is None:
-            from langchain_community.vectorstores import Chroma
-            from langchain_community.embeddings import HuggingFaceEmbeddings
+            from langchain_chroma import Chroma
+            from langchain_huggingface import HuggingFaceEmbeddings
 
             embeddings = HuggingFaceEmbeddings(model_name=self._settings.rag_embed_model)
             self._vectorstore = Chroma(
@@ -49,18 +49,19 @@ class RAGService:
                     screens.add(meta["screen"])
 
                 kind = meta.get("kind", "")
-                if kind in ("swiftui_view", "accessibility_map", "screen_card"):
+                if kind in ("swiftui_view", "accessibility_map", "screen_card",
+                            "swift_class", "swift_struct", "uikit_viewcontroller"):
                     code_snippets.append({
                         "kind": kind,
                         "path": meta.get("path", ""),
                         "screen": meta.get("screen", ""),
-                        "content": doc.page_content[:500],
+                        "content": doc.page_content[:1500],
                     })
 
             return {
                 "accessibility_ids": sorted(accessibility_ids),
                 "screens": sorted(screens),
-                "code_snippets": code_snippets[:5],
+                "code_snippets": code_snippets[:8],
                 "total_docs_retrieved": len(docs),
             }
         except Exception as exc:

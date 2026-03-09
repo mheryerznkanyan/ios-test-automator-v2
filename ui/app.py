@@ -15,6 +15,10 @@ import re
 import signal
 from pathlib import Path
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # Configuration
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
@@ -27,13 +31,13 @@ if not PROJECT_ROOT:
         value="",
         placeholder="/path/to/iOS-test-automator",
     )
-PROJECT_DIR = f"{PROJECT_ROOT}/ios-app/src/SampleApp"
+PROJECT_DIR = PROJECT_ROOT
 XCODE_PROJECT = f"{PROJECT_DIR}/SampleApp.xcodeproj"
 XCODE_SCHEME = "SampleApp"
 TEST_TARGET = "SampleAppUITests"
 # Save to LLMGeneratedTest.swift - the file that's included in the Xcode project
 TEST_FILE = f"{PROJECT_DIR}/SampleAppUITests/LLMGeneratedTest.swift"
-RECORDINGS_DIR = f"{PROJECT_ROOT}/streamlit-ui/recordings"
+RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "recordings")
 
 # Simulator configuration - will be detected dynamically
 SIMULATOR_NAME = os.getenv("SIMULATOR_NAME", "iPhone 17")

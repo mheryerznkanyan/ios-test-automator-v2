@@ -67,12 +67,32 @@ ELEMENT QUERY RULES (CRITICAL - MUST FOLLOW):
 - For labels/text: use app.staticTexts["identifier"]
 - For tab bars: use app.tabBars.buttons["TabName"]
 - For lists/tables (SwiftUI List): use app.tables["identifier"]
-- For cells in lists: use app.tables.cells or app.cells
-- For search fields: use app.searchFields["identifier"]
-- FORBIDDEN: NEVER use app.otherElements[] - it does NOT work for SwiftUI views, lists, groups, or screens
-- To verify a screen is visible: check for specific UI elements that exist ON that screen (buttons, labels, text fields, tables)
+- For cells in lists: use app.tables["listIdentifier"].cells.element(boundBy: index)
+- For SwiftUI .searchable(): use app.searchFields.firstMatch — the system search field does NOT get a custom accessibilityIdentifier
+- For images: use app.images["identifier"]
+- For navigation back button: use app.navigationBars.buttons.element(boundBy: 0)
+- To access elements with dynamic identifiers (e.g. "itemTitle_1"): use the known identifier string directly
+- To verify a screen is visible: check for specific UI elements ON that screen (buttons, labels, text fields, tables) — NOT the screen container
 - For navigation verification: check that expected elements exist on the destination screen
-- Example: To verify Items screen is visible, check for app.tables["itemList"].exists or app.searchFields["searchField"].exists - do NOT check for app.otherElements["itemListScreen"]
+
+FORBIDDEN PATTERNS (will cause build or test failures):
+- NEVER use app.otherElements[] — it does NOT work for SwiftUI views
+- NEVER use NSPredicate anywhere — not with matching(), not with XCUIElementQuery, not for filtering elements. It causes fragile tests and often fails.
+- NEVER use .matching(NSPredicate(...)) or .containing(NSPredicate(...))
+- NEVER guess data values — use ONLY values from the provided RAG context (accessibility IDs, screen names, code snippets). If the context includes sample data or seed data, use those exact values.
+
+DATA VALUE ASSERTIONS (CRITICAL):
+- NEVER hardcode specific data values (item titles, prices, categories) in XCTAssertEqual unless you are 100% certain of the exact value.
+- For dynamically generated data (random prices, computed titles), verify element EXISTS and is NOT empty — do NOT assert exact values.
+- Prefer: XCTAssertFalse(detailPrice.label.isEmpty) over XCTAssertEqual(detailPrice.label, "$29.99")
+- For categories from a known set, use XCTAssertFalse(detailCategory.label.isEmpty) instead of asserting a specific category.
+- When testing search: use a search term that matches broadly (e.g. a common word like "Premium" or a category name) rather than a full exact title.
+
+RAG CONTEXT USAGE (CRITICAL):
+- You will receive code snippets, accessibility identifiers, and screen information from the app's actual source code.
+- Use the EXACT accessibility identifiers from the context — do NOT invent identifiers.
+- If the context shows how data is generated (e.g. item titles, categories), study the code carefully to understand the data patterns. Pay attention to array indexing (0-based vs 1-based) and modular arithmetic.
+- If the context shows a login flow, follow the EXACT field identifiers and credentials from the code.
 
 Example pattern with proper waits:
 ```swift

@@ -37,6 +37,14 @@ NAV_PATTERNS = [
     re.compile(r"\bfullScreenCover\s*\(", re.MULTILINE),
 ]
 
+SWIFT_CLASS_START_RE = re.compile(
+    r"(?m)^\s*(public|internal|private|fileprivate|open)?\s*(final\s+)?class\s+([A-Za-z_]\w*)\s*(?::\s*[^{\n]*)?\s*\{"
+)
+
+SWIFT_STRUCT_START_RE = re.compile(
+    r"(?m)^\s*(public|internal|private|fileprivate|open)?\s*struct\s+([A-Za-z_]\w*)\s*(?::\s*[^{\n]*)?\s*\{"
+)
+
 SWIFTUI_INTERACTIVE_RE = re.compile(
     r"\b(Button|TextField|SecureField|Toggle|Picker)\b", re.MULTILINE
 )
@@ -194,6 +202,39 @@ def build_chunks_for_file(file_text: str, rel_path: str) -> List[Chunk]:
     if nav_lines:
         nav_chunk = "NAVIGATION_SIGNALS\npath: " + rel_path + "\n" + "\n".join(nav_lines)
         chunks.append(Chunk(text=nav_chunk, meta={"kind": "navigation_signals", "path": rel_path}))
+
+    # Swift classes (Services, ViewModels, etc.) — skip UIKit VCs already handled above
+    vc_names = {name for name, _ in extract_blocks(file_text, UIKIT_VC_START_RE, name_group=3, kind="")}
+    for cls_name, block in extract_blocks(
+        file_text, SWIFT_CLASS_START_RE, name_group=3, kind="swift_class"
+    ):
+        if cls_name in vc_names:
+            continue
+        a11y_ids = sorted(set(SWIFTUI_A11Y_ID_RE.findall(block)) | set(UIKIT_A11Y_ID_RE.findall(block)))
+        meta = {
+            "kind": "swift_class",
+            "path": rel_path,
+            "screen": cls_name,
+            "symbol": cls_name,
+            "accessibility_ids": meta_list_to_str(a11y_ids),
+            "accessibility_id_count": len(a11y_ids),
+        }
+        chunks.append(Chunk(text=block[:4000], meta=meta))
+
+    # Swift structs that are NOT SwiftUI Views (models, configs, etc.)
+    view_names = {name for name, _ in extract_blocks(file_text, SWIFTUI_VIEW_START_RE, name_group=2, kind="")}
+    for struct_name, block in extract_blocks(
+        file_text, SWIFT_STRUCT_START_RE, name_group=2, kind="swift_struct"
+    ):
+        if struct_name in view_names:
+            continue
+        meta = {
+            "kind": "swift_struct",
+            "path": rel_path,
+            "screen": struct_name,
+            "symbol": struct_name,
+        }
+        chunks.append(Chunk(text=block[:2000], meta=meta))
 
     # Fallback: raw slice
     if not chunks:
