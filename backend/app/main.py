@@ -1,13 +1,26 @@
 """FastAPI application entry point with lifespan-managed services."""
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.services.test_generator import TestGenerator
 from app.services.rag_service import RAGService
 from app.api.routes import health, tests
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Unprotected paths that bypass API key auth
+# ---------------------------------------------------------------------------
+_PUBLIC_PATHS = {"/", "/health", "/rag/status", "/docs", "/openapi.json", "/redoc"}
 
 
 @asynccontextmanager
@@ -23,6 +36,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.test_generator = TestGenerator(llm=llm)
     app.state.rag_service = RAGService(settings=settings)
+    logger.info("Services initialised. Auth enabled: %s", bool(settings.api_key))
     yield
     # teardown (nothing needed for now)
 
@@ -40,6 +54,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# API key auth middleware (opt-in: only active when API_KEY is configured)
+# ---------------------------------------------------------------------------
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    """Require X-API-Key header when settings.api_key is configured.
+
+    Public paths (health, docs) are always allowed through.
+    """
+    if settings.api_key and request.url.path not in _PUBLIC_PATHS:
+        provided = request.headers.get("X-API-Key", "")
+        if provided != settings.api_key:
+            logger.warning(
+                "Unauthorized request to %s from %s",
+                request.url.path,
+                request.client.host if request.client else "unknown",
+            )
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Invalid or missing X-API-Key header."},
+            )
+    return await call_next(request)
+
 
 app.include_router(health.router)
 app.include_router(tests.router)

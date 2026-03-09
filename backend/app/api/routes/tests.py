@@ -4,6 +4,7 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, Request
 
+from app.core.config import settings
 from app.schemas.test_schemas import (
     AppContext,
     TestGenerationRequest,
@@ -30,9 +31,7 @@ async def generate_test(request: Request, body: TestGenerationRequest):
 
 @router.post("/generate-test-with-rag", response_model=TestGenerationResponse)
 async def generate_test_with_rag(request: Request, body: RAGTestGenerationRequest):
-    """
-    Generate a test using RAG to automatically retrieve context from the codebase.
-    """
+    """Generate a test using RAG to automatically retrieve context from the codebase."""
     rag_service = request.app.state.rag_service
 
     test_type = body.test_type.lower().strip()
@@ -46,8 +45,11 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
         for s in rag_context["code_snippets"]
     )
 
+    # Use caller-supplied app_name → fallback to config default
+    resolved_app_name = body.app_name or settings.default_app_name
+
     app_context = AppContext(
-        app_name="SampleApp",
+        app_name=resolved_app_name,
         screens=rag_context["screens"],
         accessibility_ids=rag_context["accessibility_ids"],
         source_code_snippets=code_snippets_text or None,
@@ -78,7 +80,19 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
 
 @router.post("/generate-tests-batch")
 async def generate_tests_batch(request: Request, bodies: List[TestGenerationRequest]):
-    """Generate multiple tests in parallel using asyncio.gather."""
+    """Generate multiple tests in parallel using asyncio.gather.
+
+    Capped at ``settings.batch_max_size`` requests per call.
+    """
+    if len(bodies) > settings.batch_max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Batch size {len(bodies)} exceeds the maximum of "
+                f"{settings.batch_max_size}. Split your request into smaller batches."
+            ),
+        )
+
     generator = request.app.state.test_generator
 
     results_raw = await asyncio.gather(

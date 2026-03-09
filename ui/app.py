@@ -17,6 +17,58 @@ from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
+# ---------------------------------------------------------------------------
+# Test history persistence helpers
+# ---------------------------------------------------------------------------
+
+_HISTORY_FILE = Path(__file__).resolve().parent / "test_history.json"
+
+
+def _serialize_history(history: list) -> list:
+    """Convert datetime objects to ISO strings for JSON serialisation."""
+    out = []
+    for item in history:
+        entry = dict(item)
+        if isinstance(entry.get("timestamp"), datetime):
+            entry["timestamp"] = entry["timestamp"].isoformat()
+        out.append(entry)
+    return out
+
+
+def _deserialize_history(raw: list) -> list:
+    """Convert ISO timestamp strings back to datetime objects."""
+    out = []
+    for item in raw:
+        entry = dict(item)
+        if isinstance(entry.get("timestamp"), str):
+            try:
+                entry["timestamp"] = datetime.fromisoformat(entry["timestamp"])
+            except ValueError:
+                pass
+        out.append(entry)
+    return out
+
+
+def load_history() -> list:
+    """Load test history from the JSON file, returning an empty list on error."""
+    if _HISTORY_FILE.exists():
+        try:
+            return _deserialize_history(json.loads(_HISTORY_FILE.read_text("utf-8")))
+        except Exception:
+            pass
+    return []
+
+
+def save_history(history: list) -> None:
+    """Persist test history to the JSON file (best-effort)."""
+    try:
+        _HISTORY_FILE.write_text(
+            json.dumps(_serialize_history(history), indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -42,9 +94,9 @@ RECORDINGS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__
 # Simulator configuration - will be detected dynamically
 SIMULATOR_NAME = os.getenv("SIMULATOR_NAME", "iPhone 17")
 
-# Initialize session state
+# Initialize session state — load persisted history on first run
 if "test_history" not in st.session_state:
-    st.session_state.test_history = []
+    st.session_state.test_history = load_history()
 if "current_test" not in st.session_state:
     st.session_state.current_test = None
 
@@ -578,6 +630,7 @@ with st.sidebar:
 
     if st.button("🔄 Clear History"):
         st.session_state.test_history = []
+        save_history([])
         st.rerun()
 
 # Main content
@@ -766,8 +819,8 @@ with tab1:
                                         with st.expander("View Full Test Output"):
                                             st.text(output)
 
-                                        # Add to history
-                                        st.session_state.test_history.insert(0, {
+                                        # Add to history and persist to disk
+                                        new_entry = {
                                             "class_name": class_name,
                                             "description": test_description,
                                             "passed": success,
@@ -775,8 +828,10 @@ with tab1:
                                             "timestamp": datetime.now(),
                                             "output": output,
                                             "recording": recording_path if recording_path and os.path.exists(recording_path) else None,
-                                            "human_summary": human_summary
-                                        })
+                                            "human_summary": human_summary,
+                                        }
+                                        st.session_state.test_history.insert(0, new_entry)
+                                        save_history(st.session_state.test_history)
 
 with tab2:
     st.header("Test History")

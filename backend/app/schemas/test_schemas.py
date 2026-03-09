@@ -36,3 +36,7 @@ class RAGTestGenerationRequest(BaseModel):
     class_name: Optional[str] = Field(None, description="Custom class name for the test")
     include_comments: bool = Field(True, description="Include explanatory comments in generated code")
     rag_top_k: Optional[int] = Field(None, description="Number of RAG documents to retrieve (default: 10)")
+    app_name: Optional[str] = Field(
+        None,
+        description="iOS app name injected into the test context. Falls back to DEFAULT_APP_NAME in config.",
+    )

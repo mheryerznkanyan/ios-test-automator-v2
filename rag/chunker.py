@@ -79,12 +79,82 @@ def _safe_json(obj) -> str:
 
 
 def find_matching_brace(text: str, open_index: int) -> int:
-    """MVP brace matcher (not perfect inside strings/comments)."""
+    """Brace matcher that skips braces inside strings and line/block comments.
+
+    Handles:
+    - Single-line comments  ``// ...``
+    - Block comments        ``/* ... */``
+    - Double-quoted strings ``"..."`` with escape sequences
+    - Triple-quoted strings ``\"\"\"...\"\"\"`` (Swift multi-line strings)
+    """
     depth = 0
     i = open_index
     n = len(text)
+    in_line_comment = False
+    in_block_comment = False
+    in_string = False
+    string_triple = False
+
     while i < n:
         c = text[i]
+
+        # ── line comment ────────────────────────────────────────────────────
+        if in_line_comment:
+            if c == "\n":
+                in_line_comment = False
+            i += 1
+            continue
+
+        # ── block comment ───────────────────────────────────────────────────
+        if in_block_comment:
+            if c == "*" and i + 1 < n and text[i + 1] == "/":
+                in_block_comment = False
+                i += 2
+            else:
+                i += 1
+            continue
+
+        # ── inside string ───────────────────────────────────────────────────
+        if in_string:
+            if string_triple:
+                if text[i : i + 3] == '"""':
+                    in_string = False
+                    i += 3
+                else:
+                    i += 1
+            else:
+                if c == "\\" and i + 1 < n:
+                    i += 2  # skip escaped char
+                elif c == '"':
+                    in_string = False
+                    i += 1
+                else:
+                    i += 1
+            continue
+
+        # ── detect comment / string starts ──────────────────────────────────
+        if c == "/" and i + 1 < n:
+            if text[i + 1] == "/":
+                in_line_comment = True
+                i += 2
+                continue
+            if text[i + 1] == "*":
+                in_block_comment = True
+                i += 2
+                continue
+
+        if c == '"':
+            if text[i : i + 3] == '"""':
+                in_string = True
+                string_triple = True
+                i += 3
+            else:
+                in_string = True
+                string_triple = False
+                i += 1
+            continue
+
+        # ── brace counting ──────────────────────────────────────────────────
         if c == "{":
             depth += 1
         elif c == "}":
@@ -92,6 +162,7 @@ def find_matching_brace(text: str, open_index: int) -> int:
             if depth == 0:
                 return i
         i += 1
+
     return n - 1
 
 

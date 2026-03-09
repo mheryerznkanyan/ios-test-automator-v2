@@ -1,5 +1,6 @@
 """Configuration settings using Pydantic BaseSettings"""
 from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 # Resolve .env relative to project root (two levels up from this file)
@@ -21,6 +22,15 @@ class Settings(BaseSettings):
     simulator_name: str = "iPhone 17"
     api_title: str = "iOS Test Generator API"
     api_version: str = "2.0.0"
+
+    # App identity used as fallback when the RAG route doesn't receive one
+    default_app_name: str = "SampleApp"
+
+    # Auth: set a non-empty value to require X-API-Key header on all routes
+    api_key: str = ""
+
+    # Batch endpoint: max requests per call to prevent runaway LLM usage
+    batch_max_size: int = 20
 
     class Config:
         env_file = str(_ENV_FILE)

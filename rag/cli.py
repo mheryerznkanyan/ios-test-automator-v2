@@ -24,6 +24,7 @@ from rag.auditor import audit_accessibility
 from rag.store import (
     build_vectorstore,
     upsert_documents,
+    prune_stale_documents,
     iter_swift_files,
     normalize_path,
     read_text,
@@ -85,6 +86,11 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         docs.append(Document(page_content=ch.text, metadata=ch.meta))
 
     vs = build_vectorstore(args.persist, args.collection, args.embed_model)
+
+    # Prune docs for Swift files that no longer exist on disk
+    current_rel_paths = {normalize_path(p, app_dir) for p in swift_files}
+    pruned = prune_stale_documents(vs, current_rel_paths)
+
     upsert_documents(vs, docs)
 
     print(safe_json({
@@ -93,6 +99,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         "documents_upserted": len(docs),
         "persist_dir": args.persist,
         "collection": args.collection,
+        "stale_paths_pruned": pruned,
         "accessibility_audit": {
             "flagged_screens": len(findings),
             "note": summary["note"],

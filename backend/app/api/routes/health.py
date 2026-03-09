@@ -21,4 +21,12 @@ async def health():
         "status": "healthy",
         "llm_configured": bool(settings.anthropic_api_key),
         "model": settings.anthropic_model,
+        "auth_enabled": bool(settings.api_key),
     }
+
+
+@router.get("/rag/status")
+async def rag_status(request: Request):
+    """Return vector store health: document count, collection, persist directory."""
+    rag_service = request.app.state.rag_service
+    return rag_service.status()
