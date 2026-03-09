@@ -77,8 +77,9 @@ ELEMENT QUERY RULES (CRITICAL - MUST FOLLOW):
 - For buttons: use app.buttons["identifier"]
 - For labels/text: use app.staticTexts["identifier"]
 - For tab bars: use app.tabBars.buttons["TabName"]
-- For lists/tables (SwiftUI List): use app.tables["identifier"]
-- For cells in lists: use app.tables["listIdentifier"].cells.element(boundBy: index)
+- For lists (SwiftUI List): use app.collectionViews["identifier"] — SwiftUI List renders as UICollectionView on iOS 16+, NOT as UITableView
+- For cells in lists: use app.collectionViews["listIdentifier"].cells.element(boundBy: index)
+- NEVER use app.tables[] for SwiftUI List — it will NOT find the element on modern iOS
 - For SwiftUI .searchable(): use app.searchFields.firstMatch — the system search field does NOT get a custom accessibilityIdentifier
 - For images: use app.images["identifier"]
 - For navigation back button: use app.navigationBars.buttons.element(boundBy: 0)
@@ -135,7 +136,7 @@ XCTAssertTrue(loginButton.waitForExistence(timeout: 5), "Login button should exi
 loginButton.tap()
 
 // Wait for next screen after login
-let itemList = app.tables["itemList"]
+let itemList = app.collectionViews["itemList"]
 XCTAssertTrue(itemList.waitForExistence(timeout: 10), "Item list should appear after login")
 ```
 
