@@ -13,6 +13,7 @@ from tenacity import (
 
 from app.core.prompts import XCTEST_SYSTEM_PROMPT, XCUITEST_SYSTEM_PROMPT
 from app.schemas.test_schemas import TestGenerationRequest, TestGenerationResponse
+from app.services.quality_scorer import QualityScorer
 from app.utils.swift_utils import extract_class_name, strip_code_fences
 from app.utils.validators import (
     build_class_name_section,
@@ -37,6 +38,7 @@ class TestGenerator:
 
     def __init__(self, llm):
         self._llm = llm
+        self._quality_scorer = QualityScorer()
 
     @retry(
         stop=stop_after_attempt(3),
@@ -104,6 +106,15 @@ class TestGenerator:
 
         logger.info("Test generated: class=%s type=%s", final_class_name, test_type)
 
+        # Score test quality
+        quality_report = self._quality_scorer.score(swift_code, request.test_description)
+        logger.info(
+            "Quality score: %.1f (%s), confidence=%s",
+            quality_report["overall_score"],
+            quality_report["grade"],
+            quality_report["confidence"],
+        )
+
         return TestGenerationResponse(
             swift_code=swift_code,
             test_type=test_type,
@@ -113,5 +124,6 @@ class TestGenerator:
                 "has_context": bool(request.app_context),
                 "context_provided": bool(context_section),
                 "contract_validation": validation_results if test_type == "ui" else None,
+                "quality": quality_report,
             },
         )
