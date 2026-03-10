@@ -11,6 +11,9 @@ interface Settings {
 }
 
 const AVAILABLE_DEVICES = [
+  'iPhone 17 Pro',
+  'iPhone 16 Pro Max',
+  'iPhone 16 Pro',
   'iPhone 15 Pro Max',
   'iPhone 15 Pro',
   'iPhone 15',
@@ -21,6 +24,9 @@ const AVAILABLE_DEVICES = [
 ]
 
 const AVAILABLE_IOS_VERSIONS = [
+  '18.0',
+  '17.5',
+  '17.4',
   '17.2',
   '17.1',
   '17.0',
