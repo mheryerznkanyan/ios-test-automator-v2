@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Unprotected paths that bypass API key auth
 # ---------------------------------------------------------------------------
-_PUBLIC_PATHS = {"/", "/health", "/rag/status", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {
+    "/", "/health", "/rag/status", "/docs", "/openapi.json", "/redoc",
+    "/run-test", "/generate-test-with-rag", "/recordings"
+}
 
 
 @asynccontextmanager

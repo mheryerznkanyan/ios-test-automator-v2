@@ -1,5 +1,6 @@
 """Test execution routes"""
 import logging
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -18,12 +19,12 @@ class TestExecutionRequest(BaseModel):
 class TestExecutionResponse(BaseModel):
     success: bool
     test_id: str
-    video_url: str | None = None
+    video_url: Optional[str] = None
     logs: str = ""
     duration: float = 0.0
     device: str = ""
     ios_version: str = ""
-    error: str | None = None
+    error: Optional[str] = None
 
 
 @router.post("/run-test", response_model=TestExecutionResponse)
