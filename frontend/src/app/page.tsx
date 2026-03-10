@@ -23,11 +23,24 @@ interface TestResult {
   }
 }
 
+interface ExecutionResult {
+  success: boolean
+  test_id: string
+  video_url: string | null
+  logs: string
+  duration: number
+  device: string
+  ios_version: string
+  error?: string
+}
+
 export default function TestGenerator() {
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TestResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [executionLoading, setExecutionLoading] = useState(false)
+  const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null)
 
   const handleGenerate = async () => {
     if (!description.trim()) {
@@ -68,6 +81,40 @@ export default function TestGenerator() {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       handleGenerate()
+    }
+  }
+
+  const handleRunTest = async () => {
+    if (!result) return
+
+    setExecutionLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch('http://localhost:8000/run-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          test_code: result.swift_code,
+          app_name: 'YourApp',
+          device: 'iPhone 15 Pro',
+          ios_version: '17.0',
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.detail || 'Failed to run test')
+      }
+
+      const data = await response.json()
+      setExecutionResult(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to run test')
+    } finally {
+      setExecutionLoading(false)
     }
   }
 
@@ -331,6 +378,131 @@ export default function TestGenerator() {
                       </SyntaxHighlighter>
                     </div>
                   </div>
+
+                  {/* Run in Simulator Button */}
+                  {!executionResult && (
+                    <motion.button
+                      onClick={handleRunTest}
+                      disabled={executionLoading}
+                      className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 hover:scale-105 disabled:hover:scale-100"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3, duration: 0.6 }}
+                      whileHover={{ scale: executionLoading ? 1 : 1.02 }}
+                      whileTap={{ scale: executionLoading ? 1 : 0.98 }}
+                    >
+                      {executionLoading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                              fill="none"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                          Running in Simulator...
+                        </span>
+                      ) : (
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Run in Simulator
+                        </span>
+                      )}
+                    </motion.button>
+                  )}
+
+                  {/* Execution Results with Video */}
+                  {executionResult && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="glass p-6 rounded-xl space-y-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg font-semibold">Test Execution</h3>
+                        <span className={`px-3 py-1 rounded-full text-sm ${
+                          executionResult.success
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {executionResult.success ? '✓ Passed' : '✗ Failed'}
+                        </span>
+                      </div>
+
+                      {/* Video Player */}
+                      {executionResult.video_url && (
+                        <div className="rounded-lg overflow-hidden bg-gray-900">
+                          <video
+                            controls
+                            className="w-full"
+                            src={`http://localhost:8000${executionResult.video_url}`}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                      )}
+
+                      {/* Execution Details */}
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-400">Device:</span>
+                          <p className="text-white">{executionResult.device}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">iOS Version:</span>
+                          <p className="text-white">{executionResult.ios_version}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Duration:</span>
+                          <p className="text-white">{executionResult.duration.toFixed(2)}s</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Test ID:</span>
+                          <p className="text-white font-mono text-xs">{executionResult.test_id}</p>
+                        </div>
+                      </div>
+
+                      {/* Logs */}
+                      {executionResult.logs && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2 text-gray-400">Logs</h4>
+                          <pre className="bg-gray-900 p-4 rounded-lg text-xs text-gray-300 overflow-x-auto">
+                            {executionResult.logs}
+                          </pre>
+                        </div>
+                      )}
+
+                      {/* Error */}
+                      {executionResult.error && (
+                        <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4">
+                          <p className="text-red-400 text-sm">{executionResult.error}</p>
+                        </div>
+                      )}
+
+                      {/* Run Again Button */}
+                      <button
+                        onClick={() => {
+                          setExecutionResult(null)
+                          handleRunTest()
+                        }}
+                        className="w-full bg-gray-700 hover:bg-gray-600 text-white px-6 py-3 rounded-lg text-sm font-semibold transition-colors"
+                      >
+                        Run Again
+                      </button>
+                    </motion.div>
+                  )}
                 </motion.div>
               ) : (
                 <motion.div

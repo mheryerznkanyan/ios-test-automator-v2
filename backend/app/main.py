@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.services.enrichment_service import EnrichmentService
 from app.services.test_generator import TestGenerator
 from app.services.rag_service import RAGService
-from app.api.routes import health, tests
+from app.services.test_runner import TestRunner
+from app.api.routes import health, tests, execution
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +30,7 @@ _PUBLIC_PATHS = {"/", "/health", "/rag/status", "/docs", "/openapi.json", "/redo
 async def lifespan(app: FastAPI):
     """Initialize and teardown application-level services."""
     from langchain_anthropic import ChatAnthropic
+    from pathlib import Path
 
     llm = ChatAnthropic(
         model=settings.anthropic_model,
@@ -38,6 +41,11 @@ async def lifespan(app: FastAPI):
     app.state.test_generator = TestGenerator(llm=llm)
     app.state.rag_service = RAGService(settings=settings)
     app.state.enrichment_service = EnrichmentService(llm=llm)
+    
+    # Initialize test runner with recordings directory
+    recordings_dir = Path(__file__).parent.parent / "recordings"
+    app.state.test_runner = TestRunner(recordings_dir=recordings_dir)
+    
     logger.info("Services initialised. Auth enabled: %s", bool(settings.api_key))
     yield
     # teardown (nothing needed for now)
@@ -84,6 +92,13 @@ async def api_key_middleware(request: Request, call_next):
 
 app.include_router(health.router)
 app.include_router(tests.router)
+app.include_router(execution.router)
+
+# Mount static files for video recordings
+from pathlib import Path
+recordings_dir = Path(__file__).parent.parent / "recordings"
+recordings_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/recordings", StaticFiles(directory=str(recordings_dir)), name="recordings")
 
 
 if __name__ == "__main__":
