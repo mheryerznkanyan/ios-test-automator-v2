@@ -6,7 +6,9 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 interface TestResult {
-  test_code: string
+  swift_code: string
+  test_type: string
+  class_name: string
   metadata?: {
     quality_report?: {
       overall_score: number
@@ -14,19 +16,22 @@ interface TestResult {
       confidence: string
       recommendations: string[]
     }
+    enrichment?: {
+      original_description: string
+      enriched_description: string
+    }
   }
 }
 
 export default function TestGenerator() {
-  const [videoFile, setVideoFile] = useState<File | null>(null)
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TestResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleGenerate = async () => {
-    if (!videoFile || !description) {
-      setError('Please provide both a screen recording and test description')
+    if (!description.trim()) {
+      setError('Please provide a test description')
       return
     }
 
@@ -34,17 +39,21 @@ export default function TestGenerator() {
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.append('screen_recording', videoFile)
-      formData.append('test_description', description)
-
-      const response = await fetch('/api/tests/generate', {
+      const response = await fetch('/api/generate-test-with-rag', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          test_description: description,
+          test_type: 'ui',
+          include_comments: true,
+        }),
       })
 
       if (!response.ok) {
-        throw new Error('Failed to generate test')
+        const errorData = await response.json().catch(() => null)
+        throw new Error(errorData?.detail || 'Failed to generate test')
       }
 
       const data = await response.json()
@@ -53,6 +62,12 @@ export default function TestGenerator() {
       setError(err instanceof Error ? err.message : 'Failed to generate test')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      handleGenerate()
     }
   }
 
@@ -67,6 +82,8 @@ export default function TestGenerator() {
           </div>
           <a
             href="https://testara.dev"
+            target="_blank"
+            rel="noopener noreferrer"
             className="text-sm text-gray-400 hover:text-white transition-colors"
           >
             About
@@ -85,59 +102,8 @@ export default function TestGenerator() {
             >
               <h1 className="text-4xl font-bold mb-2">Generate iOS Test</h1>
               <p className="text-gray-400">
-                Upload a screen recording and describe what you want to test
+                Describe what you want to test in plain English
               </p>
-            </motion.div>
-
-            {/* Screen Recording Upload */}
-            <motion.div
-              className="glass p-6 rounded-xl"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.6 }}
-            >
-              <label className="block text-sm font-semibold mb-3">
-                Screen Recording
-              </label>
-              <div className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
-                  className="hidden"
-                  id="video-upload"
-                />
-                <label
-                  htmlFor="video-upload"
-                  className="cursor-pointer flex flex-col items-center gap-2"
-                >
-                  <svg
-                    className="w-12 h-12 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                    />
-                  </svg>
-                  {videoFile ? (
-                    <span className="text-blue-400">{videoFile.name}</span>
-                  ) : (
-                    <>
-                      <span className="text-gray-400">
-                        Click to upload or drag and drop
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        MP4, MOV up to 50MB
-                      </span>
-                    </>
-                  )}
-                </label>
-              </div>
             </motion.div>
 
             {/* Test Description */}
@@ -145,7 +111,7 @@ export default function TestGenerator() {
               className="glass p-6 rounded-xl"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
+              transition={{ delay: 0.1, duration: 0.6 }}
             >
               <label className="block text-sm font-semibold mb-3">
                 Test Description
@@ -153,19 +119,47 @@ export default function TestGenerator() {
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                onKeyDown={handleKeyPress}
                 placeholder="Example: Test login with invalid password shows error message"
                 className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                rows={4}
+                rows={6}
               />
               <p className="text-xs text-gray-500 mt-2">
-                Describe what the test should verify in plain English
+                Describe what the test should verify • Press ⌘+Enter to generate
               </p>
+            </motion.div>
+
+            {/* Example Prompts */}
+            <motion.div
+              className="glass p-4 rounded-xl"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
+            >
+              <div className="text-xs font-semibold text-gray-400 mb-2">
+                Example prompts:
+              </div>
+              <div className="space-y-2">
+                {[
+                  'Test login with valid credentials navigates to home screen',
+                  'Verify signup form validation shows errors for invalid email',
+                  'Test settings screen toggle switches persist after app restart',
+                ].map((example, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setDescription(example)}
+                    className="w-full text-left text-sm text-gray-400 hover:text-blue-400 transition-colors p-2 rounded hover:bg-gray-800/50"
+                  >
+                    → {example}
+                  </button>
+                ))}
+              </div>
             </motion.div>
 
             {/* Generate Button */}
             <motion.button
               onClick={handleGenerate}
-              disabled={loading || !videoFile || !description}
+              disabled={loading || !description.trim()}
               className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white px-8 py-4 rounded-lg text-lg font-semibold transition-all duration-300 hover:scale-105 disabled:hover:scale-100"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -269,13 +263,40 @@ export default function TestGenerator() {
                     </div>
                   )}
 
+                  {/* Enrichment Info */}
+                  {result.metadata?.enrichment && (
+                    <div className="glass p-4 rounded-xl">
+                      <details className="group">
+                        <summary className="text-sm font-semibold cursor-pointer text-gray-400 hover:text-white transition-colors">
+                          ✨ AI Enrichment Applied
+                        </summary>
+                        <div className="mt-3 space-y-2 text-xs">
+                          <div>
+                            <span className="text-gray-500">Original:</span>
+                            <p className="text-gray-400 mt-1">
+                              {result.metadata.enrichment.original_description}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Enriched:</span>
+                            <p className="text-gray-400 mt-1">
+                              {result.metadata.enrichment.enriched_description}
+                            </p>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  )}
+
                   {/* Generated Code */}
                   <div className="glass p-6 rounded-xl">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold">Generated Test</h3>
+                      <h3 className="text-lg font-semibold">
+                        {result.class_name}
+                      </h3>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText(result.test_code)
+                          navigator.clipboard.writeText(result.swift_code)
                         }}
                         className="text-sm text-gray-400 hover:text-white transition-colors flex items-center gap-2"
                       >
@@ -306,7 +327,7 @@ export default function TestGenerator() {
                           fontSize: '0.875rem',
                         }}
                       >
-                        {result.test_code}
+                        {result.swift_code}
                       </SyntaxHighlighter>
                     </div>
                   </div>
