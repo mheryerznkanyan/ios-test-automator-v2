@@ -9,19 +9,30 @@ export default function Sidebar() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   
   useEffect(() => {
-    // Load theme from localStorage
+    // Load theme from localStorage on mount
     const stored = localStorage.getItem('testara_theme') as 'dark' | 'light' | null
     if (stored) {
       setTheme(stored)
-      document.documentElement.classList.toggle('light', stored === 'light')
+      applyTheme(stored)
+    } else {
+      // Default to dark
+      applyTheme('dark')
     }
   }, [])
+  
+  const applyTheme = (newTheme: 'dark' | 'light') => {
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }
   
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark'
     setTheme(newTheme)
     localStorage.setItem('testara_theme', newTheme)
-    document.documentElement.classList.toggle('light', newTheme === 'light')
+    applyTheme(newTheme)
   }
   
   const links = [

@@ -33,15 +33,6 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: 'rlig' 1, 'calt' 1;
   }
-
-  /* Apply dark theme by default */
-  html {
-    @apply dark;
-  }
-
-  html.light {
-    @apply bg-white text-gray-900;
-  }
 }
 
 @layer utilities {
@@ -71,9 +62,7 @@ html {
 
 /* Glass morphism */
 .glass {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  @apply bg-glass-bg border border-border backdrop-blur-sm;
 }
 
 /* Code block styling */
