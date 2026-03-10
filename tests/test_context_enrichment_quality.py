@@ -55,7 +55,7 @@ class TestEnrichmentQuality:
     def judge_llm(self):
         """LLM for judging quality"""
         return ChatAnthropic(
-            model="claude-sonnet-4",  # Use best model for judging
+            model="claude-opus-4-6",  # Use best model for judging
             temperature=0,  # Deterministic
             api_key=settings.anthropic_api_key,
         )
@@ -255,20 +255,20 @@ class TestContextExtraction:
         
         # Mock query responses
         def mock_query(query_text, k=10):
-            if "screen" in query_text.lower() or "view" in query_text.lower():
-                return {
-                    "code_snippets": [
-                        {"path": "Views/LoginView.swift", "content": "struct LoginView: View"},
-                        {"path": "Views/ItemListView.swift", "content": "struct ItemListView: View"},
-                        {"path": "Views/ProfileView.swift", "content": "struct ProfileView: View"},
-                    ]
-                }
-            elif "navigation" in query_text.lower():
+            if "navigation" in query_text.lower():
                 return {
                     "code_snippets": [
                         {"path": "App.swift", "content": "@main struct MyApp: App { LoginView() }"},
                         {"path": "ContentView.swift", "content": "TabView { ItemsTab() ProfileTab() }"},
                         {"path": "ItemListView.swift", "content": "NavigationLink { ItemDetailView() }"},
+                    ]
+                }
+            elif "screen" in query_text.lower() or "view" in query_text.lower():
+                return {
+                    "code_snippets": [
+                        {"path": "Views/LoginView.swift", "content": "struct LoginView: View"},
+                        {"path": "Views/ItemListView.swift", "content": "struct ItemListView: View"},
+                        {"path": "Views/ProfileView.swift", "content": "struct ProfileView: View"},
                     ]
                 }
             elif "accessibility" in query_text.lower():
