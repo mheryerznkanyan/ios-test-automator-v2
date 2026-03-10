@@ -1,5 +1,6 @@
 """EnrichmentService — expands a brief test description into a precise test specification."""
 import logging
+from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from tenacity import (
@@ -25,8 +26,34 @@ class EnrichmentService:
     The LLM is injected at construction time (same instance as TestGenerator).
     """
 
-    def __init__(self, llm):
+    def __init__(self, llm, app_context_path: str = None):
         self._llm = llm
+        self._app_context = self._load_app_context(app_context_path)
+    
+    def _load_app_context(self, context_path: str = None) -> str:
+        """Load app context from file if available"""
+        if context_path and Path(context_path).exists():
+            try:
+                with open(context_path, 'r') as f:
+                    context = f.read()
+                logger.info(f"Loaded app context from {context_path}")
+                return context
+            except Exception as e:
+                logger.warning(f"Failed to load app context: {e}")
+                return ""
+        
+        # Try default location
+        default_path = Path(__file__).parent.parent.parent / "APP_CONTEXT.md"
+        if default_path.exists():
+            try:
+                with open(default_path, 'r') as f:
+                    context = f.read()
+                logger.info(f"Loaded app context from {default_path}")
+                return context
+            except Exception as e:
+                logger.warning(f"Failed to load default app context: {e}")
+        
+        return ""
 
     @retry(
         stop=stop_after_attempt(3),
@@ -54,11 +81,17 @@ class EnrichmentService:
         """
         original = description.strip()
 
+        # Build context-aware prompt
+        context_section = ""
+        if self._app_context:
+            context_section = f"\n\nAPP CONTEXT:\n{self._app_context}\n\n"
+        
         messages = [
-            SystemMessage(content=ENRICHMENT_SYSTEM_PROMPT),
+            SystemMessage(content=ENRICHMENT_SYSTEM_PROMPT + context_section),
             HumanMessage(
                 content=(
                     f"Enrich this iOS test description:\n\n{original}\n\n"
+                    "Use the app context above to make the enriched description more specific and relevant to this app. "
                     "Return only the enriched description text."
                 )
             ),
