@@ -47,7 +47,12 @@ async def lifespan(app: FastAPI):
     
     # Initialize test runner with recordings directory
     recordings_dir = Path(__file__).parent.parent / "recordings"
-    app.state.test_runner = TestRunner(recordings_dir=recordings_dir)
+    app.state.test_runner = TestRunner(
+        recordings_dir=recordings_dir,
+        xcode_project=settings.xcode_project,
+        xcode_scheme=settings.xcode_scheme,
+        xcode_ui_test_target=settings.xcode_ui_test_target,
+    )
     
     logger.info("Services initialised. Auth enabled: %s", bool(settings.api_key))
     yield

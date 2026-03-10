@@ -30,12 +30,18 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    // Load settings from localStorage
+    // Load settings from localStorage, migrating old format if needed
     const stored = localStorage.getItem('testara_settings')
     if (stored) {
-      setSettings(JSON.parse(stored))
+      const parsed = JSON.parse(stored)
+      setSettings({
+        deviceName: parsed.deviceName || parsed.device || 'iPhone 15 Pro',
+        deviceUdid: parsed.deviceUdid || '',
+        iosVersion: parsed.iosVersion || '17.0',
+        appName: parsed.appName || 'YourApp',
+      })
     }
-    
+
     // Fetch available simulators
     fetchSimulators()
   }, [])
@@ -48,22 +54,20 @@ export default function SettingsPage() {
         console.log('Fetched simulators:', data.devices)
         setAvailableDevices(data.devices)
         
-        // If no device selected yet and devices are available, select first booted device
+        // Auto-select device if no UDID is set yet
         const stored = localStorage.getItem('testara_settings')
-        console.log('Stored settings:', stored)
-        if (!stored && data.devices.length > 0) {
+        const parsed = stored ? JSON.parse(stored) : null
+        const hasDeviceUdid = parsed?.deviceUdid
+        if (!hasDeviceUdid && data.devices.length > 0) {
           const bootedDevice = data.devices.find((d: SimulatorDevice) => d.state === 'Booted')
           const defaultDevice = bootedDevice || data.devices[0]
-          
-          console.log('Auto-selecting device:', defaultDevice)
-          const autoSettings = {
+
+          setSettings(prev => ({
+            ...prev,
             deviceName: defaultDevice.name,
             deviceUdid: defaultDevice.udid,
             iosVersion: defaultDevice.ios_version,
-            appName: 'YourApp',
-          }
-          console.log('Auto-selected settings:', autoSettings)
-          setSettings(autoSettings)
+          }))
         }
       }
     } catch (error) {
@@ -136,7 +140,7 @@ export default function SettingsPage() {
                 >
                   {availableDevices.map((device) => (
                     <option key={device.udid} value={device.udid}>
-                      {device.name} (iOS {device.ios_version}) {device.state === 'Booted' ? '🟢' : ''}
+                      {device.name} (iOS {device.ios_version}) [{device.udid.slice(0, 8)}] {device.state === 'Booted' ? '🟢' : ''}
                     </option>
                   ))}
                 </select>

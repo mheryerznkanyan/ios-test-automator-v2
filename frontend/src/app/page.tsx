@@ -54,7 +54,12 @@ export default function TestGenerator() {
       try {
         const parsed = JSON.parse(stored)
         console.log('Loaded settings from localStorage:', parsed)
-        setSettings(parsed)
+        setSettings({
+          deviceName: parsed.deviceName || parsed.device || 'iPhone 15 Pro',
+          deviceUdid: parsed.deviceUdid || '',
+          iosVersion: parsed.iosVersion || '17.0',
+          appName: parsed.appName || 'YourApp',
+        })
       } catch (e) {
         console.error('Failed to parse settings:', e)
       }
