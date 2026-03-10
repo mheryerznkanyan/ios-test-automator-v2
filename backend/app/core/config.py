@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # App identity used as fallback when the RAG route doesn't receive one
     default_app_name: str = "SampleApp"
 
+    # Xcode project path for running tests
+    xcode_project: str = ""
+    xcode_scheme: str = "SampleApp"
+    xcode_ui_test_target: str = "SampleAppUITests"
+
     # Auth: set a non-empty value to require X-API-Key header on all routes
     api_key: str = ""
 

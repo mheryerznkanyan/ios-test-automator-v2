@@ -25,37 +25,6 @@ async def _enrich(request: Request, description: str) -> dict:
     return await asyncio.to_thread(svc.enrich, description)
 
 
-@router.post("/generate-test", response_model=TestGenerationResponse)
-async def generate_test(request: Request, body: TestGenerationRequest):
-    """Generate a single test.
-
-    The description is automatically enriched by the LLM before generation.
-    Both the original and enriched descriptions are returned in metadata.
-    """
-    enrichment = await _enrich(request, body.test_description)
-
-    # Replace the description with the enriched version for generation
-    enriched_body = body.model_copy(update={"test_description": enrichment["enriched"]})
-
-    generator = request.app.state.test_generator
-    try:
-        response = await asyncio.to_thread(generator.run, enriched_body)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Error generating test: {exc}")
-
-    response.metadata["enrichment"] = {
-        "original_description": enrichment["original"],
-        "enriched_description": enrichment["enriched"],
-        "enrichment_used": enrichment["used"],
-        **({"enrichment_error": enrichment["error"]} if "error" in enrichment else {}),
-    }
-    return response
-
-
 @router.post("/generate-test-with-rag", response_model=TestGenerationResponse)
 async def generate_test_with_rag(request: Request, body: RAGTestGenerationRequest):
     """Generate a test using RAG context.
@@ -104,7 +73,7 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
         source_code_snippets=code_snippets_text or None,
     )
 
-    wrapped = TestGenerationRequest(
+    gen_request = TestGenerationRequest(
         test_description=enriched_description,
         test_type=test_type,
         app_context=app_context,
@@ -112,7 +81,22 @@ async def generate_test_with_rag(request: Request, body: RAGTestGenerationReques
         include_comments=body.include_comments,
     )
 
-    response = await generate_test(request, wrapped)
+    generator = request.app.state.test_generator
+    try:
+        response = await asyncio.to_thread(generator.run, gen_request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error generating test: {exc}")
+
+    response.metadata["enrichment"] = {
+        "original_description": body.test_description,
+        "enriched_description": enriched_description,
+        "enrichment_used": enrichment["used"],
+        **({"enrichment_error": enrichment["error"]} if "error" in enrichment else {}),
+    }
 
     response.metadata["rag_enabled"] = True
     response.metadata["rag_context"] = {
