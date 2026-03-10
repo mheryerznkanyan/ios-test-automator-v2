@@ -45,20 +45,25 @@ export default function SettingsPage() {
       const response = await fetch('http://localhost:8000/simulators')
       if (response.ok) {
         const data = await response.json()
+        console.log('Fetched simulators:', data.devices)
         setAvailableDevices(data.devices)
         
         // If no device selected yet and devices are available, select first booted device
         const stored = localStorage.getItem('testara_settings')
+        console.log('Stored settings:', stored)
         if (!stored && data.devices.length > 0) {
           const bootedDevice = data.devices.find((d: SimulatorDevice) => d.state === 'Booted')
           const defaultDevice = bootedDevice || data.devices[0]
           
-          setSettings({
+          console.log('Auto-selecting device:', defaultDevice)
+          const autoSettings = {
             deviceName: defaultDevice.name,
             deviceUdid: defaultDevice.udid,
             iosVersion: defaultDevice.ios_version,
             appName: 'YourApp',
-          })
+          }
+          console.log('Auto-selected settings:', autoSettings)
+          setSettings(autoSettings)
         }
       }
     } catch (error) {
@@ -69,7 +74,9 @@ export default function SettingsPage() {
   }
 
   const handleSave = () => {
+    console.log('Saving settings:', settings)
     localStorage.setItem('testara_settings', JSON.stringify(settings))
+    console.log('Settings saved to localStorage')
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -77,12 +84,15 @@ export default function SettingsPage() {
   const handleDeviceChange = (udid: string) => {
     const device = availableDevices.find(d => d.udid === udid)
     if (device) {
-      setSettings({
+      console.log('Device changed to:', device)
+      const newSettings = {
         ...settings,
         deviceName: device.name,
         deviceUdid: device.udid,
         iosVersion: device.ios_version,
-      })
+      }
+      console.log('New settings:', newSettings)
+      setSettings(newSettings)
     }
   }
 

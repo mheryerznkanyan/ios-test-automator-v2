@@ -48,12 +48,43 @@ export default function TestGenerator() {
     appName: 'YourApp',
   })
 
-  useEffect(() => {
-    // Load settings from localStorage
+  const loadSettings = () => {
     const stored = localStorage.getItem('testara_settings')
     if (stored) {
-      const parsed = JSON.parse(stored)
-      setSettings(parsed)
+      try {
+        const parsed = JSON.parse(stored)
+        console.log('Loaded settings from localStorage:', parsed)
+        setSettings(parsed)
+      } catch (e) {
+        console.error('Failed to parse settings:', e)
+      }
+    } else {
+      console.log('No settings found in localStorage')
+    }
+  }
+
+  useEffect(() => {
+    // Load settings on mount
+    loadSettings()
+    
+    // Reload settings when page becomes visible (user returns from Settings)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadSettings()
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    // Also listen for storage events (in case settings changed in another tab)
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'testara_settings') {
+        loadSettings()
+      }
+    })
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [])
 
@@ -105,6 +136,15 @@ export default function TestGenerator() {
     setExecutionLoading(true)
     setError(null)
 
+    const deviceToUse = settings.deviceUdid || settings.deviceName
+    console.log('Running test with settings:', {
+      device: deviceToUse,
+      deviceUdid: settings.deviceUdid,
+      deviceName: settings.deviceName,
+      ios_version: settings.iosVersion,
+      app_name: settings.appName,
+    })
+
     try {
       const response = await fetch('http://localhost:8000/run-test', {
         method: 'POST',
@@ -114,7 +154,7 @@ export default function TestGenerator() {
         body: JSON.stringify({
           test_code: result.swift_code,
           app_name: settings.appName,
-          device: settings.deviceUdid || settings.deviceName,  // Use UDID if available
+          device: deviceToUse,  // Use UDID if available
           ios_version: settings.iosVersion,
         }),
       })
