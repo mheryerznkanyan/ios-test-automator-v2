@@ -4,17 +4,43 @@
 
 @layer base {
   :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+    --muted: 0 0% 60%;
+    --muted-foreground: 0 0% 45%;
+    --border: 0 0% 90%;
+    --accent: 0 0% 96%;
+    --sidebar: 0 0% 98%;
+    --glass-bg: 0 0% 96%;
+  }
+
+  .dark {
     --background: 0 0% 0%;
     --foreground: 0 0% 100%;
+    --muted: 0 0% 40%;
+    --muted-foreground: 0 0% 60%;
+    --border: 0 0% 15%;
+    --accent: 0 0% 10%;
+    --sidebar: 0 0% 3%;
+    --glass-bg: 0 0% 5%;
   }
 
   * {
-    @apply border-gray-800;
+    @apply border-border;
   }
 
   body {
-    @apply bg-black text-white antialiased;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  /* Apply dark theme by default */
+  html {
+    @apply dark;
+  }
+
+  html.light {
+    @apply bg-white text-gray-900;
   }
 }
 

@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import Navigation from '@/components/Navigation'
 
 interface Settings {
   device: string
@@ -59,10 +58,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-black">
-      <Navigation />
-      
-      <main className="max-w-3xl mx-auto px-6 py-12">
+    <div className="h-full bg-background">
+      <div className="max-w-3xl mx-auto px-8 py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -181,7 +178,7 @@ export default function SettingsPage() {
             {saved ? '✓ Saved!' : 'Save Settings'}
           </motion.button>
         </div>
-      </main>
+      </div>
     </div>
   )
 }

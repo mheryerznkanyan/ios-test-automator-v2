@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import Navigation from '@/components/Navigation'
 
 interface TestResult {
   swift_code: string
@@ -133,10 +132,8 @@ export default function TestGenerator() {
   }
 
   return (
-    <div className="min-h-screen bg-black">
-      <Navigation />
-
-      <main className="max-w-7xl mx-auto px-6 py-12">
+    <div className="h-full bg-background">
+      <div className="max-w-7xl mx-auto px-8 py-8">
         {/* Settings Indicator */}
         <div className="mb-6 glass p-3 rounded-lg flex items-center justify-between text-sm">
           <div className="flex items-center gap-4 text-gray-400">
@@ -540,7 +537,7 @@ export default function TestGenerator() {
             </AnimatePresence>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   )
 }
