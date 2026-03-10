@@ -110,35 +110,26 @@ class AppContextExtractor:
     def _extract_ui_elements(self) -> List[str]:
         """Extract common UI elements and accessibility IDs"""
         try:
-            result = self.rag_service.query("accessibilityIdentifier", k=20)
+            # Query for accessibility_map kind - this has all IDs listed!
+            result = self.rag_service.query("ACCESSIBILITY_IDS", k=10)
             
             elements = []
             for snippet in result.get("code_snippets", []):
+                kind = snippet.get("kind", "")
                 content = snippet.get("content", "")
                 
-                # Look for accessibility identifiers
-                if ".accessibilityIdentifier(" in content:
+                # accessibility_map kind has IDs listed line by line
+                if kind == "accessibility_map":
                     lines = content.split("\n")
                     for line in lines:
-                        if ".accessibilityIdentifier(" in line:
-                            # Extract identifier name - handle both static strings and interpolation
-                            # Pattern: .accessibilityIdentifier("loginButton")
-                            # Pattern: .accessibilityIdentifier("detail_\(label)")
-                            if 'accessibilityIdentifier("' in line:
-                                parts = line.split('accessibilityIdentifier("')
-                                if len(parts) > 1:
-                                    id_part = parts[1].split('"')[0]
-                                    # Clean up interpolation patterns
-                                    if "\\(" in id_part:
-                                        # Pattern like "detail_\(label)" → "detail_*"
-                                        id_name = id_part.split("\\(")[0] + "*"
-                                    else:
-                                        id_name = id_part
-                                    
-                                    if id_name and id_name not in elements:
-                                        elements.append(f"`{id_name}`")
+                        line = line.strip()
+                        # Skip header lines
+                        if line and not line.startswith("ACCESSIBILITY_IDS") and not line.startswith("path:"):
+                            # This is an ID!
+                            if line not in elements:
+                                elements.append(f"`{line}`")
             
-            return list(set(elements[:25]))  # Top 25 unique IDs
+            return elements[:30]  # Top 30 IDs
             
         except Exception as e:
             logger.warning(f"Failed to extract UI elements: {e}")
