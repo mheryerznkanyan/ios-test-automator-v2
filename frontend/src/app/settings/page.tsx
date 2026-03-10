@@ -3,44 +3,30 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 
+interface SimulatorDevice {
+  name: string
+  udid: string
+  ios_version: string
+  state: string
+}
+
 interface Settings {
-  device: string
+  deviceName: string
+  deviceUdid: string
   iosVersion: string
   appName: string
 }
 
-const AVAILABLE_DEVICES = [
-  'iPhone 17 Pro',
-  'iPhone 16 Pro Max',
-  'iPhone 16 Pro',
-  'iPhone 15 Pro Max',
-  'iPhone 15 Pro',
-  'iPhone 15',
-  'iPhone 14 Pro',
-  'iPhone 14',
-  'iPhone 13',
-  'iPhone SE (3rd generation)',
-]
-
-const AVAILABLE_IOS_VERSIONS = [
-  '18.0',
-  '17.5',
-  '17.4',
-  '17.2',
-  '17.1',
-  '17.0',
-  '16.4',
-  '16.0',
-  '15.0',
-]
-
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({
-    device: 'iPhone 15 Pro',
+    deviceName: 'iPhone 15 Pro',
+    deviceUdid: '',
     iosVersion: '17.0',
     appName: 'YourApp',
   })
   
+  const [availableDevices, setAvailableDevices] = useState<SimulatorDevice[]>([])
+  const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -49,12 +35,55 @@ export default function SettingsPage() {
     if (stored) {
       setSettings(JSON.parse(stored))
     }
+    
+    // Fetch available simulators
+    fetchSimulators()
   }, [])
+  
+  const fetchSimulators = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/simulators')
+      if (response.ok) {
+        const data = await response.json()
+        setAvailableDevices(data.devices)
+        
+        // If no device selected yet and devices are available, select first booted device
+        const stored = localStorage.getItem('testara_settings')
+        if (!stored && data.devices.length > 0) {
+          const bootedDevice = data.devices.find((d: SimulatorDevice) => d.state === 'Booted')
+          const defaultDevice = bootedDevice || data.devices[0]
+          
+          setSettings({
+            deviceName: defaultDevice.name,
+            deviceUdid: defaultDevice.udid,
+            iosVersion: defaultDevice.ios_version,
+            appName: 'YourApp',
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch simulators:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSave = () => {
     localStorage.setItem('testara_settings', JSON.stringify(settings))
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+  }
+  
+  const handleDeviceChange = (udid: string) => {
+    const device = availableDevices.find(d => d.udid === udid)
+    if (device) {
+      setSettings({
+        ...settings,
+        deviceName: device.name,
+        deviceUdid: device.udid,
+        iosVersion: device.ios_version,
+      })
+    }
   }
 
   return (
@@ -82,47 +111,59 @@ export default function SettingsPage() {
             <label className="block text-sm font-semibold mb-3">
               Simulator Device
             </label>
-            <select
-              value={settings.device}
-              onChange={(e) => setSettings({ ...settings, device: e.target.value })}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              {AVAILABLE_DEVICES.map((device) => (
-                <option key={device} value={device}>
-                  {device}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-2">
-              Select which iPhone simulator to use for test execution
-            </p>
+            {loading ? (
+              <div className="text-center py-3 text-muted">Loading simulators...</div>
+            ) : availableDevices.length === 0 ? (
+              <div className="text-center py-3 text-red-400">
+                No simulators found. Make sure Xcode is installed.
+              </div>
+            ) : (
+              <>
+                <select
+                  value={settings.deviceUdid}
+                  onChange={(e) => handleDeviceChange(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {availableDevices.map((device) => (
+                    <option key={device.udid} value={device.udid}>
+                      {device.name} (iOS {device.ios_version}) {device.state === 'Booted' ? '🟢' : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-2">
+                  🟢 = Currently booted • Showing {availableDevices.length} available simulator{availableDevices.length !== 1 ? 's' : ''}
+                </p>
+              </>
+            )}
           </motion.div>
 
-          {/* iOS Version */}
-          <motion.div
-            className="glass p-6 rounded-xl"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-          >
-            <label className="block text-sm font-semibold mb-3">
-              iOS Version
-            </label>
-            <select
-              value={settings.iosVersion}
-              onChange={(e) => setSettings({ ...settings, iosVersion: e.target.value })}
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          {/* Current Selection Display */}
+          {settings.deviceUdid && (
+            <motion.div
+              className="glass p-6 rounded-xl"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.6 }}
             >
-              {AVAILABLE_IOS_VERSIONS.map((version) => (
-                <option key={version} value={version}>
-                  iOS {version}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-gray-500 mt-2">
-              iOS version for the simulator
-            </p>
-          </motion.div>
+              <label className="block text-sm font-semibold mb-3">
+                Selected Configuration
+              </label>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted">Device:</span>
+                  <span className="text-foreground">{settings.deviceName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">iOS:</span>
+                  <span className="text-foreground">{settings.iosVersion}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">UDID:</span>
+                  <span className="text-foreground font-mono text-xs">{settings.deviceUdid.slice(0, 8)}...</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* App Name */}
           <motion.div
@@ -146,24 +187,17 @@ export default function SettingsPage() {
             </p>
           </motion.div>
 
-          {/* Available Simulators Info */}
-          <motion.div
-            className="glass p-6 rounded-xl"
+          {/* Refresh Button */}
+          <motion.button
+            onClick={fetchSimulators}
+            disabled={loading}
+            className="w-full glass hover:bg-accent px-6 py-3 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.6 }}
           >
-            <h3 className="text-sm font-semibold mb-3">Available Simulators</h3>
-            <p className="text-sm text-gray-400 mb-3">
-              To see which simulators are installed on your machine:
-            </p>
-            <code className="block bg-gray-900 p-3 rounded text-xs text-green-400 font-mono">
-              xcrun simctl list devices available
-            </code>
-            <p className="text-xs text-gray-500 mt-3">
-              Run this command in Terminal to see all available devices
-            </p>
-          </motion.div>
+            {loading ? 'Refreshing...' : '🔄 Refresh Simulators'}
+          </motion.button>
 
           {/* Save Button */}
           <motion.button

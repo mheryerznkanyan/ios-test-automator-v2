@@ -42,7 +42,8 @@ export default function TestGenerator() {
   const [executionLoading, setExecutionLoading] = useState(false)
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null)
   const [settings, setSettings] = useState({
-    device: 'iPhone 15 Pro',
+    deviceName: 'iPhone 15 Pro',
+    deviceUdid: '',
     iosVersion: '17.0',
     appName: 'YourApp',
   })
@@ -51,7 +52,8 @@ export default function TestGenerator() {
     // Load settings from localStorage
     const stored = localStorage.getItem('testara_settings')
     if (stored) {
-      setSettings(JSON.parse(stored))
+      const parsed = JSON.parse(stored)
+      setSettings(parsed)
     }
   }, [])
 
@@ -112,7 +114,7 @@ export default function TestGenerator() {
         body: JSON.stringify({
           test_code: result.swift_code,
           app_name: settings.appName,
-          device: settings.device,
+          device: settings.deviceUdid || settings.deviceName,  // Use UDID if available
           ios_version: settings.iosVersion,
         }),
       })
@@ -136,10 +138,11 @@ export default function TestGenerator() {
       <div className="max-w-7xl mx-auto px-8 py-8">
         {/* Settings Indicator */}
         <div className="mb-6 glass p-3 rounded-lg flex items-center justify-between text-sm">
-          <div className="flex items-center gap-4 text-gray-400">
-            <span>📱 {settings.device}</span>
+          <div className="flex items-center gap-4 text-muted">
+            <span>📱 {settings.deviceName}</span>
             <span>•</span>
             <span>iOS {settings.iosVersion}</span>
+            {settings.deviceUdid && <span className="text-green-400">🟢</span>}
           </div>
           <a
             href="/settings"

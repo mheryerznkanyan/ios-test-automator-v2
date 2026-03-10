@@ -12,7 +12,7 @@ from app.services.enrichment_service import EnrichmentService
 from app.services.test_generator import TestGenerator
 from app.services.rag_service import RAGService
 from app.services.test_runner import TestRunner
-from app.api.routes import health, tests, execution
+from app.api.routes import health, tests, execution, simulators
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _PUBLIC_PATHS = {
     "/", "/health", "/rag/status", "/docs", "/openapi.json", "/redoc",
-    "/run-test", "/generate-test-with-rag", "/recordings"
+    "/run-test", "/generate-test-with-rag", "/recordings", "/simulators"
 }
 
 
@@ -96,6 +96,7 @@ async def api_key_middleware(request: Request, call_next):
 app.include_router(health.router)
 app.include_router(tests.router)
 app.include_router(execution.router)
+app.include_router(simulators.router)
 
 # Mount static files for video recordings
 from pathlib import Path

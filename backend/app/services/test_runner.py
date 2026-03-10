@@ -18,6 +18,10 @@ class TestRunner:
         self.recordings_dir = Path(recordings_dir)
         self.recordings_dir.mkdir(parents=True, exist_ok=True)
     
+    def _is_udid(self, device_str: str) -> bool:
+        """Check if string is a valid UDID (UUID format)"""
+        return len(device_str) == 36 and device_str.count('-') == 4
+    
     async def run_test(
         self,
         test_code: str,
@@ -31,7 +35,7 @@ class TestRunner:
         Args:
             test_code: Swift XCUITest code
             app_name: Name of the app to test
-            device: Simulator device name
+            device: Simulator device name OR UDID (if it's a valid UUID)
             ios_version: iOS version
             
         Returns:
@@ -51,14 +55,18 @@ class TestRunner:
                 f.write(test_code)
                 test_file_path = f.name
             
-            # 2. Get simulator UDID
-            device_id = await self._get_simulator_udid(device, ios_version)
-            if not device_id:
-                return {
-                    "success": False,
-                    "error": f"Simulator '{device} ({ios_version})' not found",
-                    "test_id": test_id
-                }
+            # 2. Get simulator UDID (or use if already a UDID)
+            if self._is_udid(device):
+                device_id = device
+                logger.info(f"Using device UDID directly: {device_id}")
+            else:
+                device_id = await self._get_simulator_udid(device, ios_version)
+                if not device_id:
+                    return {
+                        "success": False,
+                        "error": f"Simulator '{device} ({ios_version})' not found",
+                        "test_id": test_id
+                    }
             
             # 3. Boot simulator
             await self._boot_simulator(device_id)
