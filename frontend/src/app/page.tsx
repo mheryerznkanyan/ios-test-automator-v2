@@ -39,7 +39,7 @@ export default function TestGenerator() {
     setError(null)
 
     try {
-      const response = await fetch('/api/generate-test-with-rag', {
+      const response = await fetch('http://localhost:8000/generate-test-with-rag', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
