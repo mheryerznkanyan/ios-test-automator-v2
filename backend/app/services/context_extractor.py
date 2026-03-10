@@ -35,20 +35,28 @@ class AppContextExtractor:
         """Extract screen/view names from RAG index"""
         try:
             # Query RAG for screens - use broader query
-            result = self.rag_service.query("View struct body", k=30)
+            result = self.rag_service.query("View struct SwiftUI", k=30)
+            
+            logger.info(f"Screen query returned {len(result.get('code_snippets', []))} snippets")
             
             screens = []
             for snippet in result.get("code_snippets", []):
                 # Get screen name from metadata (more reliable)
                 screen_name = snippet.get("screen")
+                kind = snippet.get("kind")
+                
+                logger.debug(f"Snippet: kind={kind}, screen={screen_name}")
+                
                 if screen_name:
                     # Filter out non-view types
                     if screen_name not in screens and (
                         "View" in screen_name or 
-                        snippet.get("kind") == "swiftui_view"
+                        kind == "swiftui_view"
                     ):
                         screens.append(screen_name)
+                        logger.debug(f"Added screen: {screen_name}")
             
+            logger.info(f"Extracted {len(screens)} screens")
             return sorted(screens)
             
         except Exception as e:
@@ -111,15 +119,20 @@ class AppContextExtractor:
         """Extract common UI elements and accessibility IDs"""
         try:
             # Query for accessibility_map kind - this has all IDs listed!
-            result = self.rag_service.query("ACCESSIBILITY_IDS", k=10)
+            result = self.rag_service.query("accessibilityIdentifier TextField Button", k=15)
+            
+            logger.info(f"UI elements query returned {len(result.get('code_snippets', []))} snippets")
             
             elements = []
             for snippet in result.get("code_snippets", []):
                 kind = snippet.get("kind", "")
                 content = snippet.get("content", "")
                 
+                logger.debug(f"UI snippet: kind={kind}, content_preview={content[:50]}")
+                
                 # accessibility_map kind has IDs listed line by line
                 if kind == "accessibility_map":
+                    logger.info(f"Found accessibility_map, extracting IDs...")
                     lines = content.split("\n")
                     for line in lines:
                         line = line.strip()
@@ -128,7 +141,9 @@ class AppContextExtractor:
                             # This is an ID!
                             if line not in elements:
                                 elements.append(f"`{line}`")
+                                logger.debug(f"Added ID: {line}")
             
+            logger.info(f"Extracted {len(elements)} accessibility IDs")
             return elements[:30]  # Top 30 IDs
             
         except Exception as e:
