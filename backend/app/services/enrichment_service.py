@@ -42,8 +42,8 @@ class EnrichmentService:
                 logger.warning(f"Failed to load app context: {e}")
                 return ""
         
-        # Try default location
-        default_path = Path(__file__).parent.parent.parent / "APP_CONTEXT.md"
+        # Try default location (repo root)
+        default_path = Path(__file__).parent.parent.parent.parent / "APP_CONTEXT.md"
         if default_path.exists():
             try:
                 with open(default_path, 'r') as f:

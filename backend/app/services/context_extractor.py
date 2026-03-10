@@ -119,7 +119,8 @@ class AppContextExtractor:
         """Extract common UI elements and accessibility IDs"""
         try:
             # Query for accessibility_map kind - this has all IDs listed!
-            result = self.rag_service.query("accessibilityIdentifier TextField Button", k=15)
+            # Use broader query to get all accessibility maps
+            result = self.rag_service.query("ACCESSIBILITY_IDS login profile item", k=25)
             
             logger.info(f"UI elements query returned {len(result.get('code_snippets', []))} snippets")
             
