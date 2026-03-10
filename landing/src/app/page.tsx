@@ -1,7 +1,6 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
 
 export default function LandingPage() {
   return (
@@ -366,7 +365,7 @@ function Features() {
     { icon: '🎯', title: 'Works Out of the Box', desc: 'Supports SwiftUI and UIKit' },
     { icon: '📹', title: 'Visual Proof', desc: 'Every test run is recorded on video' },
     { icon: '🔄', title: 'AI-Enriched', desc: 'Vague descriptions → precise test specifications' },
-    { icon: '🗺️', title: 'Navigation Context', desc: 'Understands your app's screens and flow' }
+    { icon: '🗺️', title: 'Navigation Context', desc: "Understands your app's screens and flow" }
   ]
 
   return (
