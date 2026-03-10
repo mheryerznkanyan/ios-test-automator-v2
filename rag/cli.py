@@ -34,6 +34,30 @@ from rag.store import (
 DEFAULT_EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
+def _generate_app_context(persist_dir: str, collection: str, embed_model: str):
+    """Generate APP_CONTEXT.md after indexing"""
+    # Import here to avoid circular dependencies
+    import sys
+    from pathlib import Path
+    
+    # Add backend to path if not already there
+    backend_path = Path(__file__).parent.parent / "backend"
+    if str(backend_path) not in sys.path:
+        sys.path.insert(0, str(backend_path))
+    
+    from app.core.config import settings
+    from app.services.rag_service import RAGService
+    from app.services.context_extractor import AppContextExtractor
+    
+    # Create RAG service pointing to this index
+    rag_service = RAGService(settings=settings)
+    extractor = AppContextExtractor(rag_service)
+    
+    # Generate and save
+    output_path = Path(__file__).parent.parent / "APP_CONTEXT.md"
+    extractor.save_to_file(str(output_path))
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
@@ -93,6 +117,16 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
     upsert_documents(vs, docs)
 
+    # Auto-generate APP_CONTEXT.md after successful indexing
+    if args.auto_context:
+        try:
+            print("\n🔍 Auto-generating APP_CONTEXT.md from indexed code...")
+            _generate_app_context(args.persist, args.collection, args.embed_model)
+            print("✅ APP_CONTEXT.md updated")
+        except Exception as e:
+            print(f"⚠️  Failed to generate APP_CONTEXT.md: {e}", file=sys.stderr)
+            # Don't fail indexing if context generation fails
+    
     print(safe_json({
         "status": "ok",
         "indexed_swift_files": len(swift_files),
@@ -104,6 +138,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             "flagged_screens": len(findings),
             "note": summary["note"],
         },
+        "context_generated": args.auto_context,
     }))
     return 0
 
@@ -146,6 +181,18 @@ def main() -> int:
         "--fail-if-missing-ids",
         action="store_true",
         help="Exit with error if heuristic audit finds screens missing accessibility IDs",
+    )
+    p_ingest.add_argument(
+        "--auto-context",
+        action="store_true",
+        default=True,
+        help="Auto-generate APP_CONTEXT.md after indexing (default: True)",
+    )
+    p_ingest.add_argument(
+        "--no-auto-context",
+        dest="auto_context",
+        action="store_false",
+        help="Skip APP_CONTEXT.md generation",
     )
     p_ingest.set_defaults(func=cmd_ingest)
 
