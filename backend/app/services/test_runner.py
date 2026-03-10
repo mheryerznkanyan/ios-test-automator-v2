@@ -72,13 +72,25 @@ class TestRunner:
             # 6. Stop recording
             await self._stop_recording(recording_process)
             
-            # 7. Clean up temp file
+            # 7. Verify video file exists and has content
+            video_ready = False
+            if video_path.exists():
+                file_size = video_path.stat().st_size
+                if file_size > 0:
+                    logger.info(f"Video file created successfully: {file_size} bytes")
+                    video_ready = True
+                else:
+                    logger.error(f"Video file exists but is empty: {video_path}")
+            else:
+                logger.error(f"Video file not found: {video_path}")
+            
+            # 8. Clean up temp file
             os.unlink(test_file_path)
             
             return {
                 "success": test_result["success"],
                 "test_id": test_id,
-                "video_path": str(video_path.name),
+                "video_path": str(video_path.name) if video_ready else None,
                 "logs": test_result.get("logs", ""),
                 "duration": test_result.get("duration", 0),
                 "device": device,
@@ -184,8 +196,15 @@ class TestRunner:
             )
             
             # Give recording time to start
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
             
+            # Check if process is still running
+            if process.returncode is not None:
+                stdout, stderr = await process.communicate()
+                logger.error(f"Recording failed to start. stdout: {stdout.decode()}, stderr: {stderr.decode()}")
+                raise RuntimeError(f"Recording process exited immediately: {stderr.decode()}")
+            
+            logger.info("Recording process started successfully")
             return process
             
         except Exception as e:
@@ -198,7 +217,18 @@ class TestRunner:
             if process and process.returncode is None:
                 logger.info("Stopping video recording")
                 process.terminate()
-                await asyncio.sleep(2)  # Wait for file to be written
+                
+                # Wait for process to actually terminate
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Recording process didn't terminate, killing it")
+                    process.kill()
+                    await process.wait()
+                
+                # Give extra time for file to be fully written
+                await asyncio.sleep(3)
+                logger.info("Recording process terminated, file should be ready")
                 
         except Exception as e:
             logger.error(f"Failed to stop recording: {e}")
@@ -229,7 +259,8 @@ class TestRunner:
             logger.info(f"Executing test on simulator {device_id}")
             
             # Simulate test running (in production, use xcodebuild)
-            await asyncio.sleep(5)  # Simulate test execution time
+            # Record for 10 seconds to ensure we have a video
+            await asyncio.sleep(10)  # Simulate test execution time
             
             # Mock successful result
             duration = time.time() - start_time
