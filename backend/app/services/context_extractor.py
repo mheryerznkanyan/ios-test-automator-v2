@@ -34,16 +34,19 @@ class AppContextExtractor:
     def _extract_screens(self) -> List[str]:
         """Extract screen/view names from RAG index"""
         try:
-            # Query RAG for screens
-            result = self.rag_service.query("List all screens and views", k=20)
+            # Query RAG for screens - use broader query
+            result = self.rag_service.query("View struct body", k=30)
             
             screens = []
             for snippet in result.get("code_snippets", []):
-                # Look for View/Screen in paths and content
-                path = snippet.get("path", "")
-                if "View.swift" in path or "Screen.swift" in path:
-                    screen_name = Path(path).stem
-                    if screen_name not in screens:
+                # Get screen name from metadata (more reliable)
+                screen_name = snippet.get("screen")
+                if screen_name:
+                    # Filter out non-view types
+                    if screen_name not in screens and (
+                        "View" in screen_name or 
+                        snippet.get("kind") == "swiftui_view"
+                    ):
                         screens.append(screen_name)
             
             return sorted(screens)
@@ -55,47 +58,59 @@ class AppContextExtractor:
     def _extract_navigation(self) -> Dict:
         """Extract navigation patterns"""
         try:
-            result = self.rag_service.query("navigation patterns, NavigationLink, TabView", k=10)
+            result = self.rag_service.query("TabView NavigationStack ContentView", k=15)
             
             nav_info = {
                 "patterns": [],
-                "entry_screen": None
+                "entry_screen": None,
+                "tabs": []
             }
             
             for snippet in result.get("code_snippets", []):
                 content = snippet.get("content", "")
-                if "NavigationLink" in content:
-                    nav_info["patterns"].append("NavigationLink (push navigation)")
-                if "TabView" in content:
-                    nav_info["patterns"].append("TabView (tab-based navigation)")
-                if "sheet" in content or ".sheet(" in content:
-                    nav_info["patterns"].append("Modal sheets")
+                screen_name = snippet.get("screen", "")
                 
-                # Try to find entry point
-                if "@main" in content or "App.swift" in snippet.get("path", ""):
-                    # Extract entry screen from content
+                # Detect patterns
+                if "NavigationLink" in content or "NavigationStack" in content:
+                    if "NavigationStack" not in [p.split()[0] for p in nav_info["patterns"]]:
+                        nav_info["patterns"].append("NavigationStack (push navigation)")
+                if "TabView" in content:
+                    if "TabView" not in [p.split()[0] for p in nav_info["patterns"]]:
+                        nav_info["patterns"].append("TabView (tab-based navigation)")
+                if "sheet" in content or ".sheet(" in content:
+                    if "Modal" not in [p.split()[0] for p in nav_info["patterns"]]:
+                        nav_info["patterns"].append("Modal sheets")
+                
+                # Extract tab labels
+                if "tabItem" in content and "Label(" in content:
                     lines = content.split("\n")
                     for line in lines:
-                        if "View()" in line:
-                            # Try to extract view name
-                            parts = line.split("View()")
-                            if parts:
-                                potential_entry = parts[0].strip().split()[-1]
-                                nav_info["entry_screen"] = potential_entry
-            
-            # Deduplicate patterns
-            nav_info["patterns"] = list(set(nav_info["patterns"]))
+                        if 'Label("' in line and "tabItem" in content:
+                            # Extract: Label("Items", ...) → "Items"
+                            parts = line.split('Label("')
+                            if len(parts) > 1:
+                                tab_name = parts[1].split('"')[0]
+                                if tab_name not in nav_info["tabs"]:
+                                    nav_info["tabs"].append(tab_name)
+                
+                # Find entry point from ContentView or similar
+                if "ContentView" in screen_name or "App" in screen_name:
+                    # Look for LoginView or initial view
+                    if "LoginView()" in content:
+                        nav_info["entry_screen"] = "LoginView"
+                    elif "MainTabView()" in content:
+                        nav_info["entry_screen"] = "MainTabView"
             
             return nav_info
             
         except Exception as e:
             logger.warning(f"Failed to extract navigation: {e}")
-            return {"patterns": [], "entry_screen": None}
+            return {"patterns": [], "entry_screen": None, "tabs": []}
     
     def _extract_ui_elements(self) -> List[str]:
         """Extract common UI elements and accessibility IDs"""
         try:
-            result = self.rag_service.query("accessibilityIdentifier, TextField, Button", k=15)
+            result = self.rag_service.query("accessibilityIdentifier", k=20)
             
             elements = []
             for snippet in result.get("code_snippets", []):
@@ -106,13 +121,24 @@ class AppContextExtractor:
                     lines = content.split("\n")
                     for line in lines:
                         if ".accessibilityIdentifier(" in line:
-                            # Extract identifier name
-                            parts = line.split('accessibilityIdentifier("')
-                            if len(parts) > 1:
-                                id_name = parts[1].split('"')[0]
-                                elements.append(f"`{id_name}`")
+                            # Extract identifier name - handle both static strings and interpolation
+                            # Pattern: .accessibilityIdentifier("loginButton")
+                            # Pattern: .accessibilityIdentifier("detail_\(label)")
+                            if 'accessibilityIdentifier("' in line:
+                                parts = line.split('accessibilityIdentifier("')
+                                if len(parts) > 1:
+                                    id_part = parts[1].split('"')[0]
+                                    # Clean up interpolation patterns
+                                    if "\\(" in id_part:
+                                        # Pattern like "detail_\(label)" → "detail_*"
+                                        id_name = id_part.split("\\(")[0] + "*"
+                                    else:
+                                        id_name = id_part
+                                    
+                                    if id_name and id_name not in elements:
+                                        elements.append(f"`{id_name}`")
             
-            return list(set(elements[:20]))  # Top 20 unique IDs
+            return list(set(elements[:25]))  # Top 25 unique IDs
             
         except Exception as e:
             logger.warning(f"Failed to extract UI elements: {e}")
@@ -165,6 +191,9 @@ The following screens/views were detected in your codebase:
         
         if navigation["entry_screen"]:
             doc += f"\n**Entry Screen:** {navigation['entry_screen']}\n"
+        
+        if navigation.get("tabs"):
+            doc += f"\n**Tabs:** {', '.join(navigation['tabs'])}\n"
         
         doc += "\n---\n\n## Common UI Elements\n\n"
         doc += "Accessibility identifiers found in codebase:\n\n"
